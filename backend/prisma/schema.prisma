@@ -1,0 +1,439 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                     String              @id @default(uuid())
+  username               String              @unique
+  email                  String?
+  password               String
+  roles                  Role[]              @default([ATLETA])
+  isActive               Boolean             @default(true)
+  refreshToken           String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  member                 Member?
+  trainingsAsCoach       Training[]
+  createdEvents          CalendarEvent[]
+  eventParticipations    EventParticipant[]
+  eventCoaches           EventCoach[]
+  reports                Report[]
+  payments               Payment[]
+  createdWorkouts        Workout[]
+
+  @@index([username])
+  @@map("users")
+}
+
+model Member {
+  id                 String              @id @default(uuid())
+  userId             String              @unique
+  firstName          String
+  lastName           String
+  fiscalCode         String              @unique
+  dateOfBirth        DateTime
+  placeOfBirth       String
+  address            String
+  city               String
+  postalCode         String
+  phone              String?
+  photoUrl           String?
+  groupId            String?
+  membershipDate     DateTime            @default(now())
+  medicalCertExpiry  DateTime?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  attendances        Attendance[]
+  group              Group?              @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  medicalCert        MedicalCertificate?
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  raceParticipations RaceParticipation[]
+  reportAthletes     ReportAthlete[]
+
+  @@index([lastName, firstName])
+  @@index([fiscalCode])
+  @@index([dateOfBirth])
+  @@index([groupId])
+  @@map("members")
+}
+
+model MedicalCertificate {
+  id         String   @id @default(uuid())
+  memberId   String   @unique
+  issueDate  DateTime
+  expiryDate DateTime
+  certType   String
+  doctorName String
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([expiryDate])
+  @@map("medical_certificates")
+}
+
+model Training {
+  id              String       @id @default(uuid())
+  name            String
+  description     String?
+  date            DateTime
+  startTime       DateTime
+  endTime         DateTime
+  location        String       @default("Sede")
+  coachId         String
+  maxParticipants Int?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  attendances     Attendance[]
+  boatUsages      BoatUsage[]
+  coach           User         @relation(fields: [coachId], references: [id])
+
+  @@index([date])
+  @@index([coachId])
+  @@map("trainings")
+}
+
+model Attendance {
+  id         String           @id @default(uuid())
+  trainingId String
+  memberId   String
+  status     AttendanceStatus @default(PRESENTE)
+  notes      String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  member     Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  training   Training         @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingId, memberId])
+  @@index([memberId])
+  @@map("attendances")
+}
+
+model Boat {
+  id            String        @id @default(uuid())
+  name          String        @unique
+  type          BoatType
+  seats         Int
+  brand         String?
+  model         String?
+  serialNumber  String?
+  purchaseDate  DateTime?
+  purchasePrice Decimal?      @db.Decimal(10, 2)
+  status        BoatStatus    @default(DISPONIBILE)
+  condition     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  usages        BoatUsage[]
+  maintenances  Maintenance[]
+
+  @@index([status])
+  @@map("boats")
+}
+
+model BoatUsage {
+  id         String    @id @default(uuid())
+  boatId     String
+  trainingId String?
+  raceId     String?
+  startTime  DateTime
+  endTime    DateTime?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  boat       Boat      @relation(fields: [boatId], references: [id], onDelete: Cascade)
+  race       Race?     @relation(fields: [raceId], references: [id])
+  training   Training? @relation(fields: [trainingId], references: [id])
+
+  @@index([boatId])
+  @@index([startTime])
+  @@map("boat_usages")
+}
+
+model Maintenance {
+  id          String          @id @default(uuid())
+  boatId      String
+  date        DateTime        @default(now())
+  type        MaintenanceType
+  description String
+  cost        Decimal?        @db.Decimal(10, 2)
+  performedBy String?
+  createdAt   DateTime        @default(now())
+  boat        Boat            @relation(fields: [boatId], references: [id], onDelete: Cascade)
+
+  @@index([boatId])
+  @@index([date])
+  @@map("maintenances")
+}
+
+model Race {
+  id                   String              @id @default(uuid())
+  name                 String
+  location             String
+  date                 DateTime
+  category             String
+  description          String?
+  registrationDeadline DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  boatUsages           BoatUsage[]
+  participations       RaceParticipation[]
+
+  @@index([date])
+  @@map("races")
+}
+
+model RaceParticipation {
+  id        String   @id @default(uuid())
+  raceId    String
+  memberId  String
+  category  String
+  result    String?
+  time      String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  race      Race     @relation(fields: [raceId], references: [id], onDelete: Cascade)
+
+  @@unique([raceId, memberId])
+  @@index([memberId])
+  @@map("race_participations")
+}
+
+model Payment {
+  id              String          @id @default(uuid())
+  title           String
+  type            PaymentTypeNew
+  quantity        Int?
+  dueDate         DateTime?
+  transactionType TransactionType
+  amount          Decimal         @db.Decimal(10, 2)
+  isPaid          Boolean         @default(false)
+  coachId         String?
+  date            DateTime
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  coach           User?           @relation(fields: [coachId], references: [id], onDelete: SetNull)
+
+  @@index([coachId])
+  @@index([date])
+  @@index([type])
+  @@index([isPaid])
+  @@map("payments")
+}
+
+model ReportTypeConfig {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  price       Decimal? @db.Decimal(10, 2)
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  reports     Report[]
+
+  @@index([isEnabled])
+  @@index([name])
+  @@map("report_type_configs")
+}
+
+model Report {
+  id             String            @id @default(uuid())
+  description    String
+  date           DateTime
+  reportTypeId   String?
+  compensation   Decimal?          @db.Decimal(10, 2)
+  coachId        String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  coach          User              @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  reportType     ReportTypeConfig? @relation(fields: [reportTypeId], references: [id], onDelete: SetNull)
+  athletes       ReportAthlete[]
+
+  @@index([coachId])
+  @@index([date])
+  @@index([reportTypeId])
+  @@map("reports")
+}
+
+model ReportAthlete {
+  id        String   @id @default(uuid())
+  reportId  String
+  memberId  String
+  createdAt DateTime @default(now())
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, memberId])
+  @@index([reportId])
+  @@index([memberId])
+  @@map("report_athletes")
+}
+
+enum Role {
+  ADMIN
+  SEGRETERIA
+  ALLENATORE
+  ATLETA
+}
+
+model Workout {
+  id               String       @id @default(uuid())
+  groupId          String
+  notes            String?
+  startDateTime    DateTime
+  endDateTime      DateTime
+  type             WorkoutType
+  distance         Int? // in metri
+  repetitions      Int?
+  weightDescription String? // descrizione per pesi
+  createdById      String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  group            Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy        User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([startDateTime])
+  @@index([type])
+  @@map("workouts")
+}
+
+enum WorkoutType {
+  PESI
+  CORSA
+  REMERGOMETRO
+  BARCA
+  BIKE
+}
+
+enum AttendanceStatus {
+  PRESENTE
+  ASSENTE
+  GIUSTIFICATO
+}
+
+enum BoatType {
+  SINGOLO
+  DOPPIO
+  QUATTRO_CON
+  QUATTRO_SENZA
+  OTTO
+}
+
+enum BoatStatus {
+  DISPONIBILE
+  IN_USO
+  MANUTENZIONE
+  FUORI_SERVIZIO
+}
+
+enum MaintenanceType {
+  ORDINARIA
+  STRAORDINARIA
+  RIPARAZIONE
+}
+
+enum PaymentType {
+  QUOTA_ANNUALE
+  QUOTA_MENSILE
+  ISCRIZIONE_GARA
+  ALTRO
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentTypeNew {
+  ABBONAMENTO_ANNUALE
+  LEZIONE
+  RIMBORSO
+  ALTRO
+}
+
+enum TransactionType {
+  ENTRATA
+  USCITA
+}
+
+enum CalendarEventType {
+  DISPONIBILITA_ALLENATORE
+  LEZIONE_SINGOLA
+  LEZIONE_GRUPPO
+  GARA
+  EVENTO_GENERICO
+}
+
+model Group {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  members   Member[]
+  workouts  Workout[]
+
+  @@index([name])
+  @@map("groups")
+}
+
+model CalendarEvent {
+  id              String            @id @default(uuid())
+  type            CalendarEventType
+  title           String
+  description     String?
+  notes           String?
+  startDateTime   DateTime
+  endDateTime     DateTime
+  createdById     String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  createdBy       User              @relation(fields: [createdById], references: [id])
+  participants    EventParticipant[]
+  coaches         EventCoach[]
+
+  @@index([type])
+  @@index([startDateTime])
+  @@index([createdById])
+  @@map("calendar_events")
+}
+
+model EventParticipant {
+  id        String        @id @default(uuid())
+  eventId   String
+  userId    String
+  createdAt DateTime      @default(now())
+  event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("event_participants")
+}
+
+model EventCoach {
+  id        String        @id @default(uuid())
+  eventId   String
+  userId    String
+  createdAt DateTime      @default(now())
+  event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("event_coaches")
+}

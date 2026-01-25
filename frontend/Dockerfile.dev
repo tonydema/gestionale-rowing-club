@@ -1,0 +1,18 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copia package files
+COPY package*.json ./
+
+# Installa dipendenze
+RUN npm install
+
+# Copia il resto del codice
+COPY . .
+
+# Esponi porta
+EXPOSE 5173
+
+# Start in development mode
+CMD ["npm", "run", "dev"]

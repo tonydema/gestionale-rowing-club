@@ -1,0 +1,24 @@
+FROM node:18-alpine
+
+# Installa OpenSSL per Prisma
+RUN apk add --no-cache openssl
+
+WORKDIR /app
+
+# Copia package files
+COPY package*.json ./
+
+# Installa dipendenze
+RUN npm install
+
+# Copia il resto del codice
+COPY . .
+
+# Genera Prisma Client
+RUN npx prisma generate
+
+# Esponi porta
+EXPOSE 3000
+
+# Start in development mode
+CMD ["npm", "run", "start:dev"]
