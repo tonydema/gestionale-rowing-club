@@ -28,15 +28,17 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3">
-        <v-card color="green" variant="tonal">
+      <v-col v-if="canViewMembers" cols="12" sm="6" md="3">
+        <v-card :color="expiredCertificatesCount > 0 ? 'error' : 'success'" variant="tonal" :to="{ name: 'Members' }">
           <v-card-text>
             <div class="d-flex justify-space-between align-center">
               <div>
-                <div class="text-h4 font-weight-bold">--</div>
-                <div class="text-subtitle-1">Allenamenti</div>
+                <div class="text-h4 font-weight-bold">{{ expiredCertificatesCount }}</div>
+                <div class="text-subtitle-1">Certificati Scaduti</div>
               </div>
-              <v-icon size="48" color="green">mdi-calendar-clock</v-icon>
+              <v-icon size="48" :color="expiredCertificatesCount > 0 ? 'error' : 'success'">
+                {{ expiredCertificatesCount > 0 ? 'mdi-alert-circle' : 'mdi-check-circle' }}
+              </v-icon>
             </div>
           </v-card-text>
         </v-card>
@@ -196,6 +198,7 @@ const authStore = useAuthStore()
 const membersStore = useMembersStore()
 
 const activeAthletesCount = ref(0)
+const expiredCertificatesCount = ref(0)
 
 const canViewMembers = computed(() => {
   return authStore.isAdmin || authStore.isSegreteria || authStore.isAllenatore
@@ -205,7 +208,18 @@ onMounted(async () => {
   if (canViewMembers.value) {
     try {
       await membersStore.fetchMembers({ page: 1, limit: 1000, isActive: true })
-      activeAthletesCount.value = membersStore.members.filter(m => m.isActive).length
+      const activeMembers = membersStore.members.filter(m => m.isActive)
+      activeAthletesCount.value = activeMembers.length
+
+      // Conta certificati scaduti (scaduti oggi o prima)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      expiredCertificatesCount.value = activeMembers.filter(m => {
+        if (!m.medicalCertExpiry) return true // Mancante = scaduto
+        const expiryDate = new Date(m.medicalCertExpiry)
+        expiryDate.setHours(0, 0, 0, 0)
+        return expiryDate <= today
+      }).length
     } catch (error) {
       console.error('Error loading members:', error)
     }

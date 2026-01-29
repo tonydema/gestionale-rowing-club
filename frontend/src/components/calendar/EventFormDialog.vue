@@ -101,25 +101,29 @@
               />
             </v-col>
 
-            <!-- Allenatori (per DISPONIBILITA_ALLENATORE, LEZIONE_SINGOLA, LEZIONE_GRUPPO) -->
+            <!-- Allenatore singolo (per LEZIONE_SINGOLA) -->
+            <v-col v-if="formData.type === 'LEZIONE_SINGOLA'" cols="12">
+              <v-select
+                v-model="formData.singleCoachId"
+                :items="coachOptions"
+                label="Istruttore *"
+                :rules="[(v) => !!v || 'Campo obbligatorio']"
+                variant="outlined"
+                required
+              />
+            </v-col>
+
+            <!-- Allenatori multipli (per DISPONIBILITA_ALLENATORE, LEZIONE_GRUPPO) -->
             <v-col
-              v-if="
-                formData.type === 'DISPONIBILITA_ALLENATORE' ||
-                formData.type === 'LEZIONE_SINGOLA' ||
-                formData.type === 'LEZIONE_GRUPPO'
-              "
+              v-if="formData.type === 'DISPONIBILITA_ALLENATORE' || formData.type === 'LEZIONE_GRUPPO'"
               cols="12"
             >
               <v-select
                 v-model="formData.coachIds"
                 :items="coachOptions"
-                :label="
-                  formData.type === 'LEZIONE_SINGOLA' || formData.type === 'LEZIONE_GRUPPO'
-                    ? 'Istruttore/i *'
-                    : 'Allenatore *'
-                "
+                :label="formData.type === 'LEZIONE_GRUPPO' ? 'Istruttore/i *' : 'Allenatore *'"
                 :rules="[(v) => !!v && v.length > 0 || 'Campo obbligatorio']"
-                :multiple="formData.type !== 'LEZIONE_SINGOLA'"
+                multiple
                 variant="outlined"
                 chips
                 closable-chips
@@ -128,18 +132,14 @@
               />
             </v-col>
 
-            <!-- Partecipanti (per LEZIONE_SINGOLA) -->
+            <!-- Partecipante (per LEZIONE_SINGOLA) - selezione singola -->
             <v-col v-if="formData.type === 'LEZIONE_SINGOLA'" cols="12">
               <v-select
-                v-model="formData.participantIds"
+                v-model="formData.singleParticipantId"
                 :items="athleteOptions"
                 label="Partecipante *"
-                :rules="[
-                  (v) => !!v && v.length === 1 || 'Seleziona esattamente un partecipante',
-                ]"
+                :rules="[(v) => !!v || 'Campo obbligatorio']"
                 variant="outlined"
-                chips
-                closable-chips
                 required
               />
             </v-col>
@@ -227,6 +227,8 @@ const formData = ref({
   endTime: '',
   participantIds: [] as string[],
   coachIds: [] as string[],
+  singleParticipantId: '' as string,
+  singleCoachId: '' as string,
 })
 
 const eventTypeOptions = computed(() => {
@@ -281,6 +283,9 @@ function loadEventData(event: CalendarEvent) {
   const startDateTime = new Date(event.startDateTime)
   const endDateTime = new Date(event.endDateTime)
 
+  const participantIds = event.participants?.map((p) => p.userId) || []
+  const coachIds = event.coaches?.map((c) => c.userId) || []
+
   formData.value = {
     type: event.type,
     title: event.title,
@@ -290,8 +295,10 @@ function loadEventData(event: CalendarEvent) {
     startTime: startDateTime.toTimeString().slice(0, 5),
     endDate: endDateTime.toISOString().split('T')[0],
     endTime: endDateTime.toTimeString().slice(0, 5),
-    participantIds: event.participants.map((p) => p.userId),
-    coachIds: event.coaches.map((c) => c.userId),
+    participantIds: participantIds,
+    coachIds: coachIds,
+    singleParticipantId: event.type === 'LEZIONE_SINGOLA' && participantIds.length > 0 ? participantIds[0] : '',
+    singleCoachId: event.type === 'LEZIONE_SINGOLA' && coachIds.length > 0 ? coachIds[0] : '',
   }
 }
 
@@ -307,6 +314,8 @@ function resetForm() {
     endTime: '',
     participantIds: [],
     coachIds: [],
+    singleParticipantId: '',
+    singleCoachId: '',
   }
   if (formRef.value) {
     formRef.value.resetValidation()
@@ -320,6 +329,18 @@ async function save() {
   loading.value = true
 
   try {
+    // Per LEZIONE_SINGOLA usa i campi singoli, altrimenti usa gli array
+    let participantIds: string[] | undefined
+    let coachIds: string[] | undefined
+
+    if (formData.value.type === 'LEZIONE_SINGOLA') {
+      participantIds = formData.value.singleParticipantId ? [formData.value.singleParticipantId] : undefined
+      coachIds = formData.value.singleCoachId ? [formData.value.singleCoachId] : undefined
+    } else {
+      participantIds = formData.value.participantIds.length > 0 ? formData.value.participantIds : undefined
+      coachIds = formData.value.coachIds.length > 0 ? formData.value.coachIds : undefined
+    }
+
     const eventData = {
       type: formData.value.type as CalendarEventType,
       title: formData.value.title,
@@ -327,9 +348,8 @@ async function save() {
       notes: formData.value.notes || undefined,
       startDateTime: `${formData.value.startDate}T${formData.value.startTime}:00`,
       endDateTime: `${formData.value.endDate}T${formData.value.endTime}:00`,
-      participantIds:
-        formData.value.participantIds.length > 0 ? formData.value.participantIds : undefined,
-      coachIds: formData.value.coachIds.length > 0 ? formData.value.coachIds : undefined,
+      participantIds,
+      coachIds,
     }
 
     if (props.isEditMode && props.event) {

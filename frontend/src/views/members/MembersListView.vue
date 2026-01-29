@@ -10,20 +10,31 @@
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span>Atleti</span>
-        <v-btn
-          v-if="authStore.isAdmin || authStore.isSegreteria"
-          color="primary"
-          prepend-icon="mdi-plus"
-          @click="openCreateDialog"
-        >
-          Nuovo Atleta
-        </v-btn>
+        <div class="d-flex gap-2">
+          <v-btn
+            v-if="authStore.isAdmin || authStore.isSegreteria"
+            color="secondary"
+            variant="outlined"
+            prepend-icon="mdi-download"
+            @click="exportToCSV"
+          >
+            Esporta CSV
+          </v-btn>
+          <v-btn
+            v-if="authStore.isAdmin || authStore.isSegreteria"
+            color="primary"
+            prepend-icon="mdi-plus"
+            @click="openCreateDialog"
+          >
+            Nuovo Atleta
+          </v-btn>
+        </div>
       </v-card-title>
 
       <v-card-text>
         <!-- Filters -->
         <v-row class="mb-4">
-          <v-col cols="12" md="4">
+          <v-col cols="12" md="3">
             <v-text-field
               v-model="searchInput"
               prepend-inner-icon="mdi-magnify"
@@ -35,7 +46,7 @@
               @update:model-value="debouncedSearch"
             />
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="2">
             <v-select
               v-model="selectedCategory"
               :items="categoryOptions"
@@ -47,7 +58,7 @@
               @update:model-value="membersStore.setCategoryFilter($event)"
             />
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="2">
             <v-select
               v-model="selectedActiveStatus"
               :items="activeStatusOptions"
@@ -59,11 +70,23 @@
               @update:model-value="membersStore.setIsActiveFilter($event)"
             />
           </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model="medicalCertFilterDate"
+              label="Certificati scaduti al"
+              type="date"
+              variant="outlined"
+              density="compact"
+              clearable
+              hide-details
+              prepend-inner-icon="mdi-certificate"
+            />
+          </v-col>
           <v-col cols="12" md="2">
             <v-btn
               variant="outlined"
               block
-              @click="membersStore.clearFilters()"
+              @click="clearAllFilters"
             >
               Pulisci Filtri
             </v-btn>
@@ -73,11 +96,11 @@
         <!-- Table -->
         <v-data-table
           :headers="headers"
-          :items="membersStore.members"
+          :items="filteredMembers"
           :loading="membersStore.isLoading"
           :items-per-page="membersStore.itemsPerPage"
           :page="membersStore.currentPage"
-          :server-items-length="membersStore.totalItems"
+          :server-items-length="medicalCertFilterDate ? filteredMembers.length : membersStore.totalItems"
           @update:page="membersStore.setPage($event)"
           @update:items-per-page="membersStore.setItemsPerPage($event)"
         >
@@ -253,7 +276,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMembersStore } from '@/stores/members'
 import { useAuthStore } from '@/stores/auth'
@@ -272,6 +295,7 @@ const uiStore = useUiStore()
 const searchInput = ref('')
 const selectedActiveStatus = ref<boolean | null>(null)
 const selectedCategory = ref<AgeCategory | null>(null)
+const medicalCertFilterDate = ref<string>('')
 
 let searchTimeout: ReturnType<typeof setTimeout> | null = null
 const debouncedSearch = (value: string) => {
@@ -279,6 +303,95 @@ const debouncedSearch = (value: string) => {
   searchTimeout = setTimeout(() => {
     membersStore.setSearchQuery(value || '')
   }, 500)
+}
+
+// Computed per filtrare i membri localmente (per il filtro certificato medico)
+const filteredMembers = computed(() => {
+  let members = membersStore.members
+
+  // Filtro certificato medico scaduto alla data selezionata
+  if (medicalCertFilterDate.value) {
+    const filterDate = new Date(medicalCertFilterDate.value)
+    filterDate.setHours(23, 59, 59, 999)
+    members = members.filter(m => {
+      if (!m.medicalCertExpiry) return true // Mancante = scaduto
+      const expiryDate = new Date(m.medicalCertExpiry)
+      return expiryDate <= filterDate
+    })
+  }
+
+  return members
+})
+
+const clearAllFilters = () => {
+  searchInput.value = ''
+  selectedActiveStatus.value = null
+  selectedCategory.value = null
+  medicalCertFilterDate.value = ''
+  membersStore.clearFilters()
+}
+
+// Export CSV
+const exportToCSV = () => {
+  const members = filteredMembers.value
+
+  if (members.length === 0) {
+    uiStore.showError('Nessun atleta da esportare')
+    return
+  }
+
+  const headers = [
+    'Nome',
+    'Cognome',
+    'Username',
+    'Email',
+    'Codice Fiscale',
+    'Data di Nascita',
+    'Età',
+    'Categoria',
+    'Telefono',
+    'Indirizzo',
+    'Città',
+    'CAP',
+    'Certificato Medico',
+    'Stato Certificato',
+    'Stato Atleta'
+  ]
+
+  const rows = members.map(m => [
+    m.firstName,
+    m.lastName,
+    m.user?.username || '',
+    m.user?.email || '',
+    m.fiscalCode,
+    formatDate(m.dateOfBirth),
+    calculateAge(m.dateOfBirth).toString(),
+    getCategoryLabelForMember(m),
+    m.phone || '',
+    m.address,
+    m.city,
+    m.postalCode,
+    m.medicalCertExpiry ? formatDate(m.medicalCertExpiry) : 'Mancante',
+    m.medicalCertExpiry ? (isMedicalCertValid(m.medicalCertExpiry) ? 'Valido' : 'Scaduto') : 'Mancante',
+    m.isActive ? 'Attivo' : 'Disattivato'
+  ])
+
+  const csvContent = [
+    headers.join(';'),
+    ...rows.map(row => row.map(cell => `"${cell}"`).join(';'))
+  ].join('\n')
+
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  link.setAttribute('download', `atleti_export_${new Date().toISOString().split('T')[0]}.csv`)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+
+  uiStore.showSuccess(`Esportati ${members.length} atleti`)
 }
 
 const activeStatusOptions = [

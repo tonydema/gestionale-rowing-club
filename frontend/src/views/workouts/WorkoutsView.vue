@@ -14,10 +14,10 @@
           <v-btn
             color="secondary"
             variant="outlined"
-            prepend-icon="mdi-share-variant"
-            @click="copyPublicLink"
+            prepend-icon="mdi-open-in-new"
+            @click="openPublicPage"
           >
-            Link Pubblico
+            Pagina Pubblica
           </v-btn>
           <v-btn
             v-if="authStore.isAdmin || authStore.isAllenatore"
@@ -367,14 +367,7 @@ function showSnackbar(message: string, color: string) {
   }
 }
 
-async function copyPublicLink() {
-  const publicUrl = `${window.location.origin}/public/workouts`
-  try {
-    await navigator.clipboard.writeText(publicUrl)
-    showSnackbar('Link copiato negli appunti!', 'success')
-  } catch (error) {
-    // Fallback: apri in nuova tab se clipboard non disponibile
-    window.open(publicUrl, '_blank')
-  }
+function openPublicPage() {
+  window.open('/public/workouts', '_blank')
 }
 </script>

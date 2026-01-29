@@ -34,11 +34,11 @@
               />
             </v-col>
 
-            <!-- Data e ora inizio -->
+            <!-- Data -->
             <v-col cols="12" md="6">
               <v-text-field
-                v-model="form.startDate"
-                label="Data inizio *"
+                v-model="form.date"
+                label="Data *"
                 type="date"
                 variant="outlined"
                 density="compact"
@@ -47,41 +47,38 @@
               />
             </v-col>
 
+            <!-- Orario con range slider -->
             <v-col cols="12" md="6">
-              <v-text-field
-                v-model="form.startTime"
-                label="Ora inizio *"
-                type="time"
-                variant="outlined"
-                density="compact"
-                :rules="[rules.required]"
-                prepend-inner-icon="mdi-clock-outline"
-              />
+              <div class="d-flex align-center justify-center" style="height: 40px;">
+                <v-chip color="primary" variant="tonal" size="large">
+                  <v-icon start>mdi-clock-outline</v-icon>
+                  {{ formatTime(form.timeRange[0]) }} - {{ formatTime(form.timeRange[1]) }}
+                </v-chip>
+              </div>
             </v-col>
 
-            <!-- Data e ora fine -->
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="form.endDate"
-                label="Data fine *"
-                type="date"
-                variant="outlined"
-                density="compact"
-                :rules="[rules.required]"
-                prepend-inner-icon="mdi-calendar"
-              />
-            </v-col>
-
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model="form.endTime"
-                label="Ora fine *"
-                type="time"
-                variant="outlined"
-                density="compact"
-                :rules="[rules.required]"
-                prepend-inner-icon="mdi-clock-outline"
-              />
+            <v-col cols="12">
+              <v-range-slider
+                v-model="form.timeRange"
+                :min="0"
+                :max="96"
+                :step="1"
+                color="primary"
+                track-color="grey-lighten-2"
+                thumb-label="always"
+                :thumb-size="20"
+              >
+                <template #thumb-label="{ modelValue }">
+                  {{ formatTime(modelValue) }}
+                </template>
+              </v-range-slider>
+              <div class="d-flex justify-space-between text-caption text-grey mt-n2">
+                <span>00:00</span>
+                <span>06:00</span>
+                <span>12:00</span>
+                <span>18:00</span>
+                <span>24:00</span>
+              </div>
             </v-col>
 
             <!-- Campi condizionali per CORSA, REMERGOMETRO, BARCA, BIKE -->
@@ -202,16 +199,28 @@ const loading = ref(false)
 const form = ref({
   groupId: '',
   type: '' as WorkoutType | '',
-  startDate: '',
-  startTime: '',
-  endDate: '',
-  endTime: '',
+  date: '',
+  timeRange: [24, 32] as [number, number], // Default: 06:00 - 08:00 (ogni step = 15 min)
   distance: null as number | null,
   repetitions: null as number | null,
   weightDescription: '',
   notes: '',
   duplicateWeeks: null as number | null,
 })
+
+// Converte il valore dello slider (0-96) in orario HH:MM
+function formatTime(sliderValue: number): string {
+  const totalMinutes = sliderValue * 15
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+}
+
+// Converte orario HH:MM in valore slider (0-96)
+function timeToSliderValue(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number)
+  return Math.round((hours * 60 + minutes) / 15)
+}
 
 const rules = {
   required: (v: any) => !!v || 'Campo obbligatorio',
@@ -242,8 +251,19 @@ watch(
   (newValue) => {
     if (newValue) {
       resetForm()
-      if (props.workout && props.isEditMode) {
-        populateForm(props.workout)
+      if (props.workout) {
+        if (props.isEditMode) {
+          // Modifica: carica tutti i dati
+          populateForm(props.workout)
+        } else if (props.workout.startDateTime) {
+          // Creazione con data precompilata dal calendario
+          const startDate = new Date(props.workout.startDateTime)
+          const endDate = new Date(props.workout.endDateTime)
+          const startTime = startDate.toTimeString().slice(0, 5)
+          const endTime = endDate.toTimeString().slice(0, 5)
+          form.value.date = startDate.toISOString().split('T')[0]
+          form.value.timeRange = [timeToSliderValue(startTime), timeToSliderValue(endTime)]
+        }
       }
     }
   }
@@ -268,10 +288,8 @@ function resetForm() {
   form.value = {
     groupId: '',
     type: '' as WorkoutType | '',
-    startDate: '',
-    startTime: '',
-    endDate: '',
-    endTime: '',
+    date: '',
+    timeRange: [24, 32], // Default: 06:00 - 08:00
     distance: null,
     repetitions: null,
     weightDescription: '',
@@ -285,13 +303,14 @@ function populateForm(workout: Workout) {
   const startDate = new Date(workout.startDateTime)
   const endDate = new Date(workout.endDateTime)
 
+  const startTime = startDate.toTimeString().slice(0, 5)
+  const endTime = endDate.toTimeString().slice(0, 5)
+
   form.value = {
     groupId: workout.groupId,
     type: workout.type,
-    startDate: startDate.toISOString().split('T')[0],
-    startTime: startDate.toTimeString().slice(0, 5),
-    endDate: endDate.toISOString().split('T')[0],
-    endTime: endDate.toTimeString().slice(0, 5),
+    date: startDate.toISOString().split('T')[0],
+    timeRange: [timeToSliderValue(startTime), timeToSliderValue(endTime)],
     distance: workout.distance || null,
     repetitions: workout.repetitions || null,
     weightDescription: workout.weightDescription || '',
@@ -306,8 +325,10 @@ async function handleSave() {
 
   loading.value = true
   try {
-    const startDateTime = new Date(`${form.value.startDate}T${form.value.startTime}`)
-    const endDateTime = new Date(`${form.value.endDate}T${form.value.endTime}`)
+    const startTime = formatTime(form.value.timeRange[0])
+    const endTime = formatTime(form.value.timeRange[1])
+    const startDateTime = new Date(`${form.value.date}T${startTime}`)
+    const endDateTime = new Date(`${form.value.date}T${endTime}`)
 
     if (props.isEditMode && props.workout) {
       // Update
