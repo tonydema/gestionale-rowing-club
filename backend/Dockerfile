@@ -39,5 +39,9 @@ COPY --from=builder /app/prisma ./prisma
 # Expose port
 EXPOSE 3000
 
+# Copy startup script
+COPY start.sh ./
+RUN chmod +x start.sh
+
 # Start the application
-CMD ["node", "dist/main"]
+CMD ["./start.sh"]
