@@ -1,6 +1,10 @@
 # Build stage
 FROM node:20-slim AS builder
 
+# Accept build argument for API URL
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 WORKDIR /app
 
 # Copy package files
@@ -12,7 +16,7 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the application (VITE_API_URL will be baked into the build)
 RUN npm run build
 
 # Production stage - use nginx to serve static files
