@@ -7,11 +7,11 @@ ENV VITE_API_URL=$VITE_API_URL
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files (excluding package-lock.json to avoid rollup issue)
+COPY package.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (npm install instead of npm ci to fix rollup native bindings)
+RUN npm install
 
 # Copy source code
 COPY . .
