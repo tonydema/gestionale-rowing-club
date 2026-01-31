@@ -44,4 +44,4 @@ COPY start.sh ./
 RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # Start the application with shell to ensure proper execution
-CMD ["/bin/bash", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["/bin/bash", "-c", "echo 'Starting migrations...' && npx prisma migrate deploy && echo 'Migrations done, starting server...' && node dist/main 2>&1"]
