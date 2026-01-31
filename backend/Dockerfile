@@ -39,9 +39,9 @@ COPY --from=builder /app/prisma ./prisma
 # Expose port
 EXPOSE 3000
 
-# Copy startup script
+# Copy startup script and fix line endings (Windows CRLF -> Unix LF)
 COPY start.sh ./
-RUN chmod +x start.sh
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
-# Start the application
-CMD ["./start.sh"]
+# Start the application with shell to ensure proper execution
+CMD ["/bin/bash", "-c", "npx prisma migrate deploy && node dist/main"]
