@@ -1,5 +1,8 @@
-# Build stage - v2 force rebuild
+# Build stage
 FROM node:20-slim AS builder
+
+# Force cache invalidation - update this to force rebuild
+RUN echo "Build version: 20260131-v3"
 
 # Install OpenSSL and other dependencies
 RUN apt-get update -y && apt-get install -y openssl libssl-dev ca-certificates
